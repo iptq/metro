@@ -149,13 +149,13 @@
         };
 
         getStops().then(stops => {
+            let selected = getCookie("selected") || "EABK";
             document.getElementById("stops").innerHTML =
-                stops.map(stop => `<option value='${stop.Value}'>${stop.Value} -- ${stop.Text}</option>`).join();
+                stops.map(stop => `<option value='${stop.Value}' ${selected == stop.Value ? "selected" : ""}>${stop.Value} -- ${stop.Text}</option>`).join();
 
             document.getElementById("stops").addEventListener("change", select);
 
             // load
-            let selected = getCookie("selected") || "EABK";
             select(selected);
         });
 
