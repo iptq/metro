@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Metro</title>
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+
+        table {
+            border: 1px solid #999;
+        }
+
+        table td {
+            padding: 5px;
+        }
+
+        table thead td {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+
+<body>
+    <center>
+        <h1>Green Line</h1>
+        <select id="stops">
+            <option>Loading...</option>
+        </select>
+        <p></p>
+        <table id="result" cellspacing=0 cellpadding=0></table>
+    </center>
+    <script>
+        // cookie stuff
+        function setCookie(cname, cvalue, exdays) {
+            var d = new Date();
+            d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+            var expires = "expires=" + d.toUTCString();
+            document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        }
+        function getCookie(cname) {
+            var name = cname + "=";
+            var decodedCookie = decodeURIComponent(document.cookie);
+            var ca = decodedCookie.split(';');
+            for (var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') {
+                    c = c.substring(1);
+                }
+                if (c.indexOf(name) == 0) {
+                    return c.substring(name.length, c.length);
+                }
+            }
+            return "";
+        }
+
+        // actual stuff
+        const base = 'https://cors-anywhere.herokuapp.com/';
+        const fetch2 = (url) => {
+            return fetch(base + url, { headers: { "x-requested-with": location.hostname } }).then(d => { return d.text() });
+        }
+
+        const translateDirCode = dir => {
+            if (typeof dir === 'number') {
+                if ([0, 1, 2, 3].indexOf(dir) >= 0) return dir;
+            } else if (typeof dir === 'string') {
+                switch (dir.toLowerCase().slice(0, 1)) {
+                    case 's':
+                        return 1;
+                    case 'e':
+                        return 2;
+                    case 'w':
+                        return 3;
+                    case 'n':
+                        return 4;
+                }
+            }
+            throw new Error(`Invalid direction: ${dir}`);
+        };
+
+        const getTimepointDepartures = (route, direction, stop) => {
+            const dirCode = translateDirCode(direction);
+            const url = `http://svc.metrotransit.org/NexTrip/${route}/${dirCode}/${stop}?format=json`;
+            return fetch2(url).then(JSON.parse);
+        };
+
+        const getEastWestGreenLine = stop => {
+            const route = 902; // Green Line Train
+
+            return Promise.all([
+                getTimepointDepartures(route, 'E', stop),
+                getTimepointDepartures(route, 'W', stop),
+            ]).then(data => {
+                let schedule = {
+                    E: [],
+                    W: [],
+                };
+                data.reduce((a, b) => a.concat(b), []).forEach(datum => {
+                    const dir = datum.RouteDirection;
+                    const text = datum.DepartureText;
+                    switch (dir) {
+                        case 'EASTBOUND':
+                            schedule.E.push(text);
+                            break;
+                        case 'WESTBOUND':
+                            schedule.W.push(text);
+                            break;
+                        default:
+                            console.error(`Unknown direction: ${dir}`);
+                    }
+                });
+                return schedule;
+            });
+        };
+
+        const getStops = () => {
+            let url = 'http://svc.metrotransit.org/NexTrip/Stops/902/2?format=json';
+            let f = new Promise((resolve, reject) => {
+                fetch2(url).then(resolve);
+            });
+            return f.then(JSON.parse)
+            // .then(d => {
+            //     d.forEach(s => {
+            //         console.log(` ${s.Value} -- ${s.Text}`);
+            //     });
+            // });
+        };
+
+        let select = (ev) => {
+            let selected = document.getElementById("stops").value;
+            setCookie("selected", selected, 365);
+            getEastWestGreenLine(selected).then(data => {
+                let s = ["<thead><tr><td>East</td><td>West</td></tr></thead>"];
+                let i = 0;
+                while (true) {
+                    if (!(i in data.E || i in data.W)) break;
+                    let line = '<tr>';
+                    if (i in data.E) line += `<td>${data.E[i]}</td>`; else line += "<td></td>";
+                    if (i in data.W) line += `<td>${data.W[i]}</td>`; else line += "<td></td>";
+                    s.push(line);
+                    i += 1;
+                }
+                document.getElementById("result").innerHTML = s.join("\n");
+            });
+        };
+
+        getStops().then(stops => {
+            document.getElementById("stops").innerHTML =
+                stops.map(stop => `<option value='${stop.Value}'>${stop.Value} -- ${stop.Text}</option>`).join();
+
+            document.getElementById("stops").addEventListener("change", select);
+
+            // load
+            let selected = getCookie("selected") || "EABK";
+            select(selected);
+        });
+
+        // const main = () => {
+        //     // console.log(getStops());
+        //     let stop = "STVI";
+        //     getEastWestGreenLine(stop)
+        //         .then(data => {
+        //             console.log('East\tWest');
+        //             let i = 0;
+        //             while (true) {
+        //                 let line = '';
+        //                 if (i in data.E) line += data.E[i];
+        //                 line += '\t';
+        //                 if (i in data.W) line += data.W[i];
+
+        //                 if (line === '\t') break;
+        //                 console.log(line);
+        //                 i += 1;
+        //             }
+        //         })
+        //         .catch(err => console.error(err));
+        // };
+    </script>
+</body>
+
+</html>
